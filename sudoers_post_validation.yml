@@ -1,0 +1,49 @@
+---
+- name: Post-Hardening Validation
+  hosts: all,!localhost,!127.0.0.1
+  become: yes
+  tasks:
+    - name: Validate sudoers syntax
+      command: visudo -c
+      register: visudo_result
+      changed_when: false
+      failed_when: visudo_result.rc != 0
+
+    - name: Search for NOPASSWD entries
+      shell: grep -r 'NOPASSWD' /etc/sudoers /etc/sudoers.d || true
+      register: nopasswd_check
+      changed_when: false
+
+    - name: Print NOPASSWD findings
+      debug:
+        var: nopasswd_check.stdout_lines
+
+    - name: Check if sudo prompts for password (non-root users only)
+      command: sudo -n true
+      register: sudo_check
+      ignore_errors: yes
+      failed_when: false
+      changed_when: false
+
+    - name: Display sudo password prompt test result
+      debug:
+        msg: >-
+          {% if sudo_check.rc == 0 %}
+            WARNING: sudo allowed without password.
+          {% else %}
+            PASS: sudo requires password.
+          {% endif %}
+
+    - name: Confirm presence of sudoers backup
+      stat:
+        path: /etc/sudoers.d_backup_01
+      register: backup_check
+
+    - name: Display backup status
+      debug:
+        msg: >-
+          {% if backup_check.stat.exists %}
+            PASS: Sudoers backup exists.
+          {% else %}
+            WARNING: Sudoers backup not found.
+          {% endif %}

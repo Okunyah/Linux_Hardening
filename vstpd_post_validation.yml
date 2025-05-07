@@ -1,0 +1,25 @@
+---
+- name: Post-Validation - Confirm vsftpd hardening
+  hosts: ftp_servers
+  become: yes
+  tasks:
+
+    - name: Read vsftpd.conf contents
+      slurp:
+        src: /etc/vsftpd.conf
+      register: vsftpd_config
+
+    - name: Decode vsftpd.conf content
+      set_fact:
+        vsftpd_conf_content: "{{ vsftpd_config.content | b64decode }}"
+
+    - name: Validate vsftpd settings
+      assert:
+        that:
+          - "'anonymous_enable=NO' in vsftpd_conf_content"
+          - "'local_enable=YES' in vsftpd_conf_content"
+          - "'write_enable=NO' in vsftpd_conf_content"
+          - "'chroot_local_user=YES' in vsftpd_conf_content"
+          - "'ssl_enable=YES' in vsftpd_conf_content"
+        fail_msg: "One or more vsftpd settings are incorrect."
+        success_msg: "All vsftpd hardening settings are correctly applied."

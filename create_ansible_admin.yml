@@ -1,0 +1,46 @@
+---
+- name: Create ansibleadmin user and distribute SSH key
+  hosts: linux
+  become: yes
+  gather_facts: yes
+
+  vars:
+    new_admin_user: ansibleadmin
+    local_key_path: "{{ playbook_dir }}/../../files/ssh_keys"
+    ssh_pub_key: "{{ lookup('file', local_key_path + '/ansibleadmin_id_rsa.pub') }}"
+    admin_password: "{{ 'SecurePa$$w0rd' | password_hash('sha512') }}"
+
+  tasks:
+
+    - name: Ensure sudo group exists
+      group:
+        name: "{{ 'sudo' if ansible_os_family == 'Debian' else 'wheel' }}"
+        state: present
+
+    - name: Create admin user
+      user:
+        name: "{{ new_admin_user }}"
+        password: "{{ admin_password }}"
+        shell: /bin/bash
+        groups: "{{ 'sudo' if ansible_os_family == 'Debian' else 'wheel' }}"
+        append: yes
+        create_home: yes
+
+    - name: Deploy SSH public key
+      authorized_key:
+        user: "{{ new_admin_user }}"
+        key: "{{ ssh_pub_key }}"
+        state: present
+
+    - name: Allow passwordless sudo
+      copy:
+        dest: "/etc/sudoers.d/{{ new_admin_user }}"
+        content: "{{ new_admin_user }} ALL=(ALL) NOPASSWD:ALL"
+        mode: '0440'
+
+    - name: Show private key path (for your reference)
+      run_once: true
+      delegate_to: localhost
+      debug:
+        msg: >
+          Use SSH key: {{ local_key_path }}/ansibleadmin_id_rsa

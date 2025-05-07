@@ -1,0 +1,11 @@
+---
+- name: Remove SUID bit from nmap if set
+  hosts: linux,!localhost,!127.0.0.1
+  become: yes
+  connection: paramiko
+  tasks:
+    - name: Remove SUID from nmap
+      file:
+        path: /usr/bin/nmap
+        mode: '0755'
+      when: ansible_facts.packages.nmap is defined

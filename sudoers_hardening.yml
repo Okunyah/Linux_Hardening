@@ -1,0 +1,44 @@
+---
+- name: Harden sudoers NOPASSWD rules
+  hosts: linux,!localhost,!127.0.0.1
+  become: yes
+  connection: paramiko
+  gather_facts: no
+
+  vars:
+    timestamp: "{{ lookup('pipe', 'date +%F_%H-%M-%S') }}"
+    backup_dir: "/etc/sudoers.d_backup_{{ timestamp }}"
+    risky_commands: ['cut', 'dig', 'cat', 'cp', 'file', 'unzip', 'xargs']
+
+  tasks:
+    - name: Ensure backup directory exists
+      file:
+        path: "{{ backup_dir }}"
+        state: directory
+        mode: '0750'
+
+    - name: Backup all sudoers.d files
+      command: cp /etc/sudoers.d/* "{{ backup_dir }}/"
+      ignore_errors: yes
+
+    - name: Find sudoers.d files
+      find:
+        paths: /etc/sudoers.d
+        file_type: file
+      register: sudoers_files
+
+    - name: Comment out NOPASSWD entries for risky commands
+      lineinfile:
+        path: "{{ item.path }}"
+        regexp: '^(?!#).*NOPASSWD:.*({{ risky_commands | join("|") }})'
+        line: "# Modified by Ansible - Entry commented out due to risky NOPASSWD rule"
+        backrefs: yes
+      loop: "{{ sudoers_files.files }}"
+      notify: validate sudoers
+
+  handlers:
+    - name: validate sudoers
+      command: visudo -c
+      register: visudo_check
+      failed_when: visudo_check.rc != 0
+      changed_when: false

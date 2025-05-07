@@ -1,0 +1,56 @@
+---
+- name: Conditionally harden vsftpd only if installed
+  hosts: linux
+  become: yes
+  gather_facts: no
+
+  tasks:
+
+    - name: Check if vsftpd is installed
+      shell: command -v vsftpd
+      register: vsftpd_check
+      ignore_errors: yes
+      changed_when: false
+
+    - name: Print info if vsftpd is not found
+      debug:
+        msg: "vsftpd not found on {{ inventory_hostname }} - skipping hardening"
+      when: vsftpd_check.rc != 0
+
+    - name: Harden vsftpd configuration
+      block:
+        - name: Disable anonymous login
+          lineinfile:
+            path: /etc/vsftpd.conf
+            regexp: '^anonymous_enable='
+            line: 'anonymous_enable=NO'
+
+        - name: Ensure local user login is enabled
+          lineinfile:
+            path: /etc/vsftpd.conf
+            regexp: '^local_enable='
+            line: 'local_enable=YES'
+
+        - name: Ensure write access is disabled
+          lineinfile:
+            path: /etc/vsftpd.conf
+            regexp: '^write_enable='
+            line: 'write_enable=NO'
+
+        - name: Chroot local users
+          lineinfile:
+            path: /etc/vsftpd.conf
+            regexp: '^chroot_local_user='
+            line: 'chroot_local_user=YES'
+
+        - name: Enforce SSL/TLS
+          lineinfile:
+            path: /etc/vsftpd.conf
+            regexp: '^ssl_enable='
+            line: 'ssl_enable=YES'
+
+        - name: Restart vsftpd
+          service:
+            name: vsftpd
+            state: restarted
+      when: vsftpd_check.rc == 0
